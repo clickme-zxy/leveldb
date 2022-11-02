@@ -83,12 +83,19 @@ int VarintLength(uint64_t v) {
   return len;
 }
 
+// p p+5 &len
+// 应该和底层的存储结构有关系
+// 不进行细看了
 const char* GetVarint32PtrFallback(const char* p, const char* limit,
                                    uint32_t* value) {
   uint32_t result = 0;
+  // 最多四次？
+  // 为什么设计7 28还这么奇幻的数据
   for (uint32_t shift = 0; shift <= 28 && p < limit; shift += 7) {
+    // 将p的内容，转换为uint8_t也就是2B的数据
     uint32_t byte = *(reinterpret_cast<const uint8_t*>(p));
     p++;
+    // 与2^6次方进行 实际是看第7为是不是1
     if (byte & 128) {
       // More bytes are present
       result |= ((byte & 127) << shift);

@@ -5,6 +5,11 @@
 #ifndef STORAGE_LEVELDB_DB_SKIPLIST_H_
 #define STORAGE_LEVELDB_DB_SKIPLIST_H_
 
+// 看起来，像一个线程安全的无锁结构
+// 不变量
+// (1) 不消毁控件
+// (2) node的内容不轻易改变
+
 // Thread safety
 // -------------
 //
@@ -12,13 +17,13 @@
 // Reads require a guarantee that the SkipList will not be destroyed
 // while the read is in progress.  Apart from that, reads progress
 // without any internal locking or synchronization.
-//
+
 // Invariants:
-//
+
 // (1) Allocated nodes are never deleted until the SkipList is
 // destroyed.  This is trivially guaranteed by the code since we
 // never delete any skip list nodes.
-//
+
 // (2) The contents of a Node except for the next/prev pointers are
 // immutable after the Node has been linked into the SkipList.
 // Only Insert() modifies the list, and it is careful to initialize
@@ -45,6 +50,7 @@ class SkipList {
   // Create a new SkipList object that will use "cmp" for comparing keys,
   // and will allocate memory using "*arena".  Objects allocated in the arena
   // must remain allocated for the lifetime of the skiplist object.
+  // 节点一旦分配就不会销毁
   explicit SkipList(Comparator cmp, Arena* arena);
 
   SkipList(const SkipList&) = delete;
@@ -100,6 +106,7 @@ class SkipList {
   enum { kMaxHeight = 12 };
 
   inline int GetMaxHeight() const {
+    // 并发要求不是很高的max-height
     return max_height_.load(std::memory_order_relaxed);
   }
 
@@ -142,18 +149,22 @@ class SkipList {
 // Implementation details follow
 template <typename Key, class Comparator>
 struct SkipList<Key, Comparator>::Node {
+  // 根据K建立Node
   explicit Node(const Key& k) : key(k) {}
 
+// 这是我的成员变量
   Key const key;
 
   // Accessors/mutators for links.  Wrapped in methods so we can
   // add the appropriate barriers as necessary.
+  // 知道位置N的Node*
   Node* Next(int n) {
     assert(n >= 0);
     // Use an 'acquire load' so that we observe a fully initialized
     // version of the returned Node.
     return next_[n].load(std::memory_order_acquire);
   }
+  
   void SetNext(int n, Node* x) {
     assert(n >= 0);
     // Use a 'release store' so that anybody who reads through this
@@ -174,6 +185,7 @@ struct SkipList<Key, Comparator>::Node {
  private:
   // Array of length equal to the node height.  next_[0] is lowest level link.
   std::atomic<Node*> next_[1];
+  // 一个存放Node*的next的数组
 };
 
 template <typename Key, class Comparator>
